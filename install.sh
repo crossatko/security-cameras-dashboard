@@ -28,8 +28,8 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 
 echo "==> Installing OS packages"
-apt-get update -y
-apt-get install -y --no-install-recommends \
+apt update -y
+apt install -y --no-install-recommends \
   ca-certificates \
   curl \
   git \
@@ -43,26 +43,20 @@ apt-get install -y --no-install-recommends \
   xdg-utils
 
 echo "==> Installing base graphics deps (Wayland/GBM)"
-apt-get install -y --no-install-recommends \
+apt install -y --no-install-recommends \
   libgbm1 \
   libdrm2 \
   libnss3 \
   libatk-bridge2.0-0 \
   libgtk-3-0 \
   libxkbcommon0 \
-  libasound2 \
   libgl1
+
+echo "==> Installing audio library"
+apt install -y --no-install-recommends libasound2
 
 echo "==> Installing Docker Engine + docker compose plugin"
 install -m 0755 -d /etc/apt/keyrings
-
-if [[ -f /etc/debian_version ]]; then
-  OS_ID="debian"
-elif [[ -f /etc/lsb-release ]] || [[ -f /etc/os-release ]]; then
-  OS_ID="ubuntu"
-else
-  OS_ID="unknown"
-fi
 
 if [[ ! -f /etc/os-release ]]; then
   echo "ERROR: /etc/os-release missing; unsupported system." >&2
@@ -71,8 +65,8 @@ fi
 
 . /etc/os-release
 
-if [[ "${ID}" != "debian" && "${ID}" != "ubuntu" ]]; then
-  echo "ERROR: Unsupported distro ID='${ID}'. Only debian/ubuntu." >&2
+if [[ "${ID}" != "ubuntu" ]]; then
+  echo "ERROR: Unsupported distro ID='${ID}'. This installer supports Ubuntu only." >&2
   exit 1
 fi
 
@@ -84,8 +78,8 @@ echo \
   ${VERSION_CODENAME} stable" \
   > /etc/apt/sources.list.d/docker.list
 
-apt-get update -y
-apt-get install -y --no-install-recommends \
+apt update -y
+apt install -y --no-install-recommends \
   docker-ce \
   docker-ce-cli \
   containerd.io \
@@ -100,8 +94,8 @@ curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o 
 chmod a+r /etc/apt/keyrings/google-chrome.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
   > /etc/apt/sources.list.d/google-chrome.list
-apt-get update -y
-apt-get install -y --no-install-recommends google-chrome-stable
+apt update -y
+apt install -y --no-install-recommends google-chrome-stable
 
 echo "==> Enabling seatd"
 systemctl enable --now seatd
