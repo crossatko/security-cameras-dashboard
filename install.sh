@@ -85,13 +85,9 @@ apt install -y --no-install-recommends \
 systemctl enable --now docker
 usermod -aG docker "${KIOSK_USER}"
 
-echo "==> Installing Google Chrome (for kiosk/app mode)"
-curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --yes --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-chmod a+r /etc/apt/keyrings/google-chrome.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
-  >/etc/apt/sources.list.d/google-chrome.list
+echo "==> Installing Chromium (for kiosk/app mode)"
 apt update -y
-apt install -y --no-install-recommends google-chrome-stable
+apt install -y chromium-browser
 
 echo "==> Configuring user groups for hardware access"
 usermod -aG video "${KIOSK_USER}" || true
@@ -130,10 +126,10 @@ TimeoutStartSec=0
 WantedBy=multi-user.target
 EOF
 
-echo "==> Creating systemd service: kiosk (cage + chrome)"
+echo "==> Creating systemd service: kiosk (cage + chromium)"
 cat >/etc/systemd/system/security-cameras-kiosk.service <<EOF
 [Unit]
-Description=Security Cameras Kiosk (cage + chrome)
+Description=Security Cameras Kiosk (cage + chromium)
 After=security-cameras-dashboard.service network-online.target systemd-user-sessions.service
 Wants=security-cameras-dashboard.service network-online.target
 Conflicts=getty@tty1.service
@@ -166,7 +162,7 @@ ExecStartPre=+/usr/bin/chmod 0700 /run/user/%U
 
 # Run cage directly (relies on native systemd-logind)
 ExecStart=/usr/bin/cage -s -- \
-  /usr/bin/google-chrome-stable \
+  /usr/bin/chromium-browser \
   --app=\${APP_URL} \
   --kiosk \
   --no-first-run \
@@ -179,7 +175,7 @@ ExecStart=/usr/bin/cage -s -- \
   --ozone-platform=wayland \
   --disable-gpu \
   --disable-software-rasterizer \
-  --user-data-dir=/home/${KIOSK_USER}/.cache/security-cameras-dashboard/chrome
+  --user-data-dir=/home/${KIOSK_USER}/.cache/security-cameras-dashboard/chromium
 
 [Install]
 WantedBy=multi-user.target
@@ -190,8 +186,9 @@ systemctl daemon-reload
 # Explicitly disable the default terminal login prompt on TTY1 so they don't fight
 systemctl disable getty@tty1.service || true
 
-systemctl enable --now security-cameras-dashboard.service
-systemctl enable --now security-cameras-kiosk.service
+# Removed --now so they start cleanly on the next boot
+systemctl enable security-cameras-dashboard.service
+systemctl enable security-cameras-kiosk.service
 
 echo
 echo "=========================================="
