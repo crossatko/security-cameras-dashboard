@@ -52,8 +52,10 @@ apt install -y --no-install-recommends \
   libxkbcommon0 \
   libgl1
 
+# Audio libs: Ubuntu releases may use either the classic or the t64 package.
+# Chrome will pull the correct dependency, but we install it explicitly to fail early.
 echo "==> Installing audio library"
-apt install -y --no-install-recommends libasound2
+apt install -y --no-install-recommends libasound2t64 || apt install -y --no-install-recommends libasound2
 
 echo "==> Installing Docker Engine + docker compose plugin"
 install -m 0755 -d /etc/apt/keyrings
