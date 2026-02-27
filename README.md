@@ -31,6 +31,21 @@ Common commands:
 docker compose up --build
 ```
 
+## Run On Ubuntu Server (Kiosk)
+
+On a fresh Ubuntu install, run the installer (this is the only command you need):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/crossatko/security-cameras-dashboard/main/install.sh | sudo -E bash
+```
+
+Environment variables (optional):
+
+- `KIOSK_USER`: Linux user that runs the kiosk (defaults to the `sudo` user)
+- `APP_URL`: URL opened in Chrome app/kiosk mode (default `http://127.0.0.1:3000`)
+- `APP_DIR`: install directory (default `/opt/security-cameras-dashboard`)
+- `REPO_URL`: git repo URL to clone (default this repo)
+
 To reset the camera database:
 
 ```bash
