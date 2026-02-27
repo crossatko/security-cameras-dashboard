@@ -38,7 +38,6 @@ apt install -y --no-install-recommends \
   apt-transport-https \
   dbus-user-session \
   cage \
-  seatd \
   fonts-noto \
   xdg-utils
 
@@ -51,11 +50,6 @@ apt install -y --no-install-recommends \
   libgtk-3-0 \
   libxkbcommon0 \
   libgl1
-
-# Audio libs: Ubuntu releases may use either the classic or the t64 package.
-# Chrome will pull the correct dependency, but we install it explicitly to fail early.
-echo "==> Installing audio library"
-apt install -y --no-install-recommends libasound2t64
 
 echo "==> Installing Docker Engine + docker compose plugin"
 install -m 0755 -d /etc/apt/keyrings
@@ -99,9 +93,7 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-
 apt update -y
 apt install -y --no-install-recommends google-chrome-stable
 
-echo "==> Enabling seatd"
-systemctl enable --now seatd
-usermod -aG seat "${KIOSK_USER}" || true
+echo "==> Configuring user groups for hardware access"
 usermod -aG video "${KIOSK_USER}" || true
 usermod -aG render "${KIOSK_USER}" || true
 usermod -aG input "${KIOSK_USER}" || true
@@ -142,8 +134,9 @@ echo "==> Creating systemd service: kiosk (cage + chrome)"
 cat >/etc/systemd/system/security-cameras-kiosk.service <<EOF
 [Unit]
 Description=Security Cameras Kiosk (cage + chrome)
-After=security-cameras-dashboard.service seatd.service network-online.target
+After=security-cameras-dashboard.service network-online.target systemd-user-sessions.service
 Wants=security-cameras-dashboard.service network-online.target
+Conflicts=getty@tty1.service
 
 [Service]
 User=${KIOSK_USER}
@@ -162,11 +155,17 @@ StandardInput=tty
 StandardOutput=journal
 StandardError=journal
 Restart=always
-RestartSec=2
+RestartSec=5
 
-ExecStart=/usr/bin/seatd-launch /usr/bin/cage -s -- \
+# Ensure Wayland has a directory to place its socket
+ExecStartPre=/usr/bin/mkdir -p /run/user/%U
+ExecStartPre=/usr/bin/chown ${KIOSK_USER}:${KIOSK_USER} /run/user/%U
+ExecStartPre=/usr/bin/chmod 0700 /run/user/%U
+
+# Run cage directly (relies on native systemd-logind)
+ExecStart=/usr/bin/cage -s -- \
   /usr/bin/google-chrome-stable \
-  --app=${APP_URL} \
+  --app=\${APP_URL} \
   --kiosk \
   --no-first-run \
   --disable-infobars \
@@ -183,12 +182,22 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+
+# Explicitly disable the default terminal login prompt on TTY1 so they don't fight
+systemctl disable getty@tty1.service || true
+
 systemctl enable --now security-cameras-dashboard.service
 systemctl enable --now security-cameras-kiosk.service
 
 echo
-echo "Installed."
+echo "=========================================="
+echo "          INSTALLATION COMPLETE           "
+echo "=========================================="
 echo "- App URL: ${APP_URL}"
 echo "- App dir: ${APP_DIR}"
 echo "- Kiosk runs on tty1 (Ctrl+Alt+F1)."
-echo "- Note: you may need to log out/in for docker group changes to apply for ${KIOSK_USER}."
+echo
+echo "Rebooting in 5 seconds to apply all group and systemd changes..."
+echo "=========================================="
+sleep 5
+reboot
