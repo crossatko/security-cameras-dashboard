@@ -10,6 +10,7 @@
     "loading": "Načítání...",
     "large": "Velký",
     "makeLarge": "Zvětšit",
+    "edit": "Upravit",
     "delete": "Smazat",
     "noCameras": "Žádné kamery nenalezeny. Přidejte svou první kameru.",
     "failedToAddCamera": "Nepodařilo se přidat kameru. Zkontrolujte zadané informace a zkuste to znovu."

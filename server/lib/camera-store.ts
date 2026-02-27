@@ -32,6 +32,9 @@ const stmtInsert = db.prepare(
   'INSERT INTO cameras (name, main_rtsp_url, sub_rtsp_url, created_at) VALUES (?, ?, ?, ?)'
 )
 const stmtDelete = db.prepare('DELETE FROM cameras WHERE id = ?')
+const stmtUpdate = db.prepare(
+  'UPDATE cameras SET name = ?, main_rtsp_url = ?, sub_rtsp_url = ? WHERE id = ?'
+)
 
 export function listCameras(): CameraRow[] {
   return stmtList.all() as CameraRow[]
@@ -55,4 +58,19 @@ export function createCamera(input: { name: string; mainRtspUrl: string; subRtsp
 export function deleteCamera(id: number): boolean {
   const info = stmtDelete.run(id)
   return info.changes > 0
+}
+
+export function updateCamera(
+  id: number,
+  input: { name: string; mainRtspUrl: string; subRtspUrl: string }
+): CameraRow {
+  const info = stmtUpdate.run(input.name, input.mainRtspUrl, input.subRtspUrl, id)
+  if (info.changes <= 0) {
+    throw new Error('Camera not found')
+  }
+  const row = getCamera(id)
+  if (!row) {
+    throw new Error('Failed to read updated camera')
+  }
+  return row
 }

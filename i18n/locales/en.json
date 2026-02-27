@@ -10,6 +10,7 @@
     "loading": "Loading",
     "large": "Large",
     "makeLarge": "Make large",
+    "edit": "Edit",
     "delete": "Delete",
     "noCameras": "No cameras",
     "failedToAddCamera": "Failed to add camera: {error}"

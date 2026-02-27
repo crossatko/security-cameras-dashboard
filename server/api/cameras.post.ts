@@ -16,6 +16,8 @@ export default defineEventHandler(async (event) => {
   return {
     id: row.id,
     name: row.name,
+    mainRtspUrl: row.main_rtsp_url,
+    subRtspUrl: row.sub_rtsp_url,
     mainStreamUrl: getStreamUrl(row.id, 'main'),
     subStreamUrl: getStreamUrl(row.id, 'sub')
   }

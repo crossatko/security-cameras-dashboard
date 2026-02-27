@@ -5,6 +5,8 @@ const { t } = useI18n();
 interface Camera {
   id: number;
   name: string;
+  mainRtspUrl?: string;
+  subRtspUrl?: string;
   mainStreamUrl: string;
   subStreamUrl: string;
   ready?: boolean;
@@ -16,6 +18,7 @@ function getHlsUrl(cameraId: number, type: "main" | "sub") {
 
 const cameras = ref<Camera[]>([]);
 const showAddForm = ref(false);
+const editingCameraId = ref<number | null>(null);
 const selectedCamera = ref<Camera | null>(null);
 const form = ref<{ name: string; mainStreamUrl: string; subStreamUrl: string }>(
   {
@@ -36,6 +39,17 @@ const hlsInstances = ref<Map<number, Hls>>(new Map());
 const mainHlsInstances = ref<Map<number, Hls>>(new Map());
 
 let isUnmounted = false;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+const isRefreshInFlight = ref(false);
+
+function camerasConfigSignature(list: Camera[]) {
+  return list
+    .map(
+      (c) =>
+        `${c.id}:${c.name}:${c.mainRtspUrl ?? ""}:${c.subRtspUrl ?? ""}`,
+    )
+    .join("|");
+}
 
 const displayCameras = computed(() => {
   const id = effectiveFeaturedCameraId.value;
@@ -238,10 +252,63 @@ async function fetchCameras() {
   }
 }
 
+function destroyPlayersForCamera(id: number) {
+  const hls = hlsInstances.value.get(id);
+  if (hls) {
+    hls.destroy();
+    hlsInstances.value.delete(id);
+  }
+
+  const mainHls = mainHlsInstances.value.get(id);
+  if (mainHls) {
+    mainHls.destroy();
+    mainHlsInstances.value.delete(id);
+  }
+}
+
+async function refreshCamerasAndPlayers() {
+  if (isUnmounted) return;
+  if (isRefreshInFlight.value) return;
+  isRefreshInFlight.value = true;
+
+  try {
+    const prevList = cameras.value.slice();
+    const prevSig = camerasConfigSignature(prevList);
+
+    await fetchCameras();
+
+    const nextList = cameras.value;
+    const nextSig = camerasConfigSignature(nextList);
+
+    // If anything changed (including ordering), rebuild all players.
+    if (prevSig === nextSig) return;
+
+    for (const id of new Set([
+      ...hlsInstances.value.keys(),
+      ...mainHlsInstances.value.keys(),
+    ])) {
+      destroyPlayersForCamera(id);
+    }
+
+    for (const c of cameras.value) c.ready = false;
+
+    await nextTick();
+    for (const camera of cameras.value) {
+      void setupPlayerForCamera(camera);
+    }
+  } finally {
+    isRefreshInFlight.value = false;
+  }
+}
+
 async function addCamera() {
   try {
-    const created = await $fetch<Camera>("/api/cameras", {
-      method: "POST",
+    const isEdit = editingCameraId.value != null;
+    const url = isEdit ? `/api/cameras/${editingCameraId.value}` : "/api/cameras";
+    const method = isEdit ? "PUT" : "POST";
+
+    const created = await $fetch<Camera>(url, {
+      method,
       body: {
         name: form.value.name,
         mainRtspUrl: form.value.mainStreamUrl,
@@ -251,16 +318,35 @@ async function addCamera() {
 
     form.value = { name: "", mainStreamUrl: "", subStreamUrl: "" };
     showAddForm.value = false;
-    await fetchCameras();
+    editingCameraId.value = null;
 
-    const newCamera = cameras.value.find((c) => c.id === created.id);
-    if (newCamera) {
-      await setupPlayerForCamera(newCamera);
-    }
+    await refreshCamerasAndPlayers();
   } catch (e) {
     console.error("Error adding camera:", e);
     alert(t("app.failedToAddCamera", { error: String(e) }));
   }
+}
+
+function openAddForm() {
+  editingCameraId.value = null;
+  form.value = { name: "", mainStreamUrl: "", subStreamUrl: "" };
+  showAddForm.value = true;
+}
+
+function openEditForm(camera: Camera) {
+  editingCameraId.value = camera.id;
+  form.value = {
+    name: camera.name,
+    mainStreamUrl: camera.mainRtspUrl ?? camera.mainStreamUrl,
+    subStreamUrl: camera.subRtspUrl ?? camera.subStreamUrl,
+  };
+  showAddForm.value = true;
+}
+
+function closeAddForm() {
+  showAddForm.value = false;
+  editingCameraId.value = null;
+  form.value = { name: "", mainStreamUrl: "", subStreamUrl: "" };
 }
 
 async function deleteCamera(id: number) {
@@ -277,7 +363,7 @@ async function deleteCamera(id: number) {
   }
 
   await $fetch(`/api/cameras/${id}`, { method: "DELETE" });
-  await fetchCameras();
+  await refreshCamerasAndPlayers();
 }
 
 function setupPlayer(
@@ -376,11 +462,11 @@ onMounted(async () => {
   }
   window.addEventListener("resize", updateViewport);
 
-  await fetchCameras();
+  await refreshCamerasAndPlayers();
 
-  for (const camera of cameras.value) {
-    void setupPlayerForCamera(camera);
-  }
+  pollTimer = setInterval(() => {
+    void refreshCamerasAndPlayers();
+  }, 10_000);
 });
 
 onUnmounted(() => {
@@ -389,6 +475,10 @@ onUnmounted(() => {
   if (gridResizeObserver) {
     gridResizeObserver.disconnect();
     gridResizeObserver = null;
+  }
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
   }
   hlsInstances.value.forEach((hls) => hls.destroy());
   mainHlsInstances.value.forEach((hls) => hls.destroy());
@@ -422,21 +512,21 @@ function handleIdleCursor() {
       </div>
       <div class="flex-1" />
       <button
-        @click="showAddForm = !showAddForm"
+        @click="showAddForm ? closeAddForm() : openAddForm()"
         class="px-3 py-1 border border-white/20 hover:border-white/40"
       >
         {{ showAddForm ? t("app.close") : t("app.add") }}
       </button>
     </div>
 
-    <div
-      v-if="showAddForm"
-      class="fixed inset-0 flex items-center justify-center border-b border-white/10 z-[60] p-4"
-    >
       <div
-        class="absolute inset-0 bg-black/50 z-40"
-        @click="showAddForm = false"
-      ></div>
+        v-if="showAddForm"
+        class="fixed inset-0 flex items-center justify-center border-b border-white/10 z-[60] p-4"
+      >
+        <div
+          class="absolute inset-0 bg-black/50 z-40"
+          @click="closeAddForm"
+        ></div>
       <form
         @submit.prevent="addCamera"
         class="grid grid-cols-1 gap-4 items-end z-50 p-8 bg-black/95 w-full shadow-4xl max-w-2xl"
@@ -512,6 +602,12 @@ function handleIdleCursor() {
             <div class="flex-1 truncate bg-black/60 px-1 py-0.5">
               {{ camera.name }}
             </div>
+            <button
+              @click.stop="openEditForm(camera)"
+              class="bg-black/60 px-1 py-0.5 border border-white/10 hover:border-white/30"
+            >
+              {{ t("app.edit") }}
+            </button>
             <!-- <button -->
             <!--   @click.stop="setFeaturedCamera(camera.id)" -->
             <!--   class="bg-black/60 px-1 py-0.5 border border-white/10 hover:border-white/30" -->
