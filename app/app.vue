@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import Hls from "hls.js";
+const { t } = useI18n();
 
 interface Camera {
   id: number;
@@ -45,128 +46,101 @@ const displayCameras = computed(() => {
   return [featured, ...rest];
 });
 
-function splitSpans(total: number, parts: number) {
-  const base = Math.floor(total / parts);
-  const rem = total % parts;
-  const spans: number[] = [];
-  for (let i = 0; i < parts; i++) spans.push(base + (i < rem ? 1 : 0));
-  return spans;
+const CAMERA_ASPECT = 5 / 4;
+
+const gridEl = ref<HTMLElement | null>(null);
+const viewport = ref({ width: 1, height: 1 });
+
+let gridResizeObserver: ResizeObserver | null = null;
+
+function updateViewport() {
+  const el = gridEl.value;
+  if (el) {
+    viewport.value = {
+      width: Math.max(1, el.clientWidth || 1),
+      height: Math.max(1, el.clientHeight || 1),
+    };
+    return;
+  }
+
+  viewport.value = {
+    width: Math.max(1, window.innerWidth || 1),
+    height: Math.max(1, window.innerHeight || 1),
+  };
 }
 
-const tilePlacementById = computed(() => {
-  const BASE = 24;
-  const list = displayCameras.value;
-  const n = list.length;
-  const placements = new Map<number, { gridColumn: string; gridRow: string }>();
-  if (n === 0) return placements;
+function coverCropFraction(tileAspect: number, contentAspect: number) {
+  const a = tileAspect;
+  const b = contentAspect;
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return 1;
+  const min = Math.min(a, b);
+  const max = Math.max(a, b);
+  return 1 - min / max;
+}
 
-  const wantFeaturedSpan = n > 1;
+function pickGridForCount(n: number, containerAspect: number) {
+  const safeContainerAspect =
+    Number.isFinite(containerAspect) && containerAspect > 0
+      ? containerAspect
+      : 16 / 9;
 
-  // Coarse tile grid (<= 4x4 for up to 16 cameras). We intentionally do NOT
-  // add extra rows/cols just to force a featured span; the span only happens
-  // when there's already slack space in the chosen grid.
-  let tileCols = 4;
-  let tileRows = 4;
-  if (n <= 1) {
-    tileCols = 1;
-    tileRows = 1;
-  } else if (n <= 2) {
-    tileCols = 2;
-    tileRows = 1;
-  } else if (n <= 4) {
-    tileCols = 2;
-    tileRows = 2;
-  } else if (n <= 6) {
-    tileCols = 3;
-    tileRows = 2;
-  } else if (n <= 8) {
-    tileCols = 4;
-    tileRows = 2;
-  } else if (n <= 12) {
-    tileCols = 4;
-    tileRows = 3;
-  } else {
-    tileCols = 4;
-    tileRows = 4;
-  }
+  const desiredEmpty = n > 1 && n % 2 === 1 ? 1 : 0;
+  const maxCols = 5;
+  const maxRows = 4;
 
-  const colSpans = splitSpans(BASE, tileCols);
-  const rowSpans = splitSpans(BASE, tileRows);
-  const colStarts: number[] = [];
-  {
-    let start = 1;
-    for (const span of colSpans) {
-      colStarts.push(start);
-      start += span;
-    }
-  }
-  const rowStarts: number[] = [];
-  {
-    let start = 1;
-    for (const span of rowSpans) {
-      rowStarts.push(start);
-      start += span;
-    }
-  }
+  let best = { cols: 1, rows: 1 };
+  let bestScore = Number.POSITIVE_INFINITY;
+  const eps = 1e-9;
 
-  const occupied = Array.from({ length: tileRows }, () => Array(tileCols).fill(false));
+  for (let rows = 1; rows <= maxRows; rows++) {
+    for (let cols = 1; cols <= maxCols; cols++) {
+      const capacity = rows * cols;
+      if (capacity < n) continue;
 
-  const canSpan =
-    wantFeaturedSpan &&
-    tileRows >= 2 &&
-    tileCols * tileRows > n;
-  let index = 0;
+      const empties = capacity - n;
+      const tileAspect = safeContainerAspect * (rows / cols);
+      const crop = coverCropFraction(tileAspect, CAMERA_ASPECT);
 
-  if (canSpan) {
-    const cam = list[index++];
-    occupied[0][0] = true;
-    occupied[1][0] = true;
+      const emptyRatio = empties / capacity;
+      const parityPenalty =
+        desiredEmpty === 0
+          ? empties === 0
+            ? 0
+            : Math.min(0.25, 0.05 * empties)
+          : empties === 1
+            ? 0
+            : Math.min(0.25, 0.05 * Math.abs(empties - 1));
 
-    const colStart = colStarts[0];
-    const rowStart = rowStarts[0];
-    const colSpan = colSpans[0];
-    const rowSpan = rowSpans[0] + rowSpans[1];
-    placements.set(cam.id, {
-      gridColumn: `${colStart} / span ${colSpan}`,
-      gridRow: `${rowStart} / span ${rowSpan}`,
-    });
-  }
+      const shapePenalty = Math.abs(cols - rows) * 0.0005;
 
-  for (; index < n; index++) {
-    const cam = list[index];
-    let placed = false;
-
-    for (let r = 0; r < tileRows && !placed; r++) {
-      for (let c = 0; c < tileCols && !placed; c++) {
-        if (occupied[r][c]) continue;
-        occupied[r][c] = true;
-
-        const colStart = colStarts[c];
-        const rowStart = rowStarts[r];
-        const colSpan = colSpans[c];
-        const rowSpan = rowSpans[r];
-        placements.set(cam.id, {
-          gridColumn: `${colStart} / span ${colSpan}`,
-          gridRow: `${rowStart} / span ${rowSpan}`,
-        });
-        placed = true;
+      const score = crop + emptyRatio * 0.15 + parityPenalty + shapePenalty;
+      if (score + eps < bestScore) {
+        bestScore = score;
+        best = { cols, rows };
       }
     }
   }
 
-  // Fallback: if something went wrong, ensure every camera at least renders.
-  for (const cam of list) {
-    if (!placements.has(cam.id)) {
-      placements.set(cam.id, { gridColumn: "1 / span 24", gridRow: "1 / span 24" });
-    }
-  }
+  return best;
+}
 
-  return placements;
+const grid = computed(() => {
+  const n = displayCameras.value.length;
+  if (n <= 0) return { cols: 1, rows: 1 };
+
+  // Single camera should always be full-screen (no intentional empty tile).
+  if (n === 1) return { cols: 1, rows: 1 };
+
+  const containerAspect = viewport.value.width / viewport.value.height;
+  return pickGridForCount(n, containerAspect);
 });
 
-function tileStyle(id: number) {
-  return tilePlacementById.value.get(id) ?? {};
-}
+const gridStyle = computed(() => {
+  return {
+    gridTemplateColumns: `repeat(${grid.value.cols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${grid.value.rows}, minmax(0, 1fr))`,
+  };
+});
 
 function setFeaturedCamera(id: number) {
   featuredCameraId.value = id;
@@ -285,7 +259,7 @@ async function addCamera() {
     }
   } catch (e) {
     console.error("Error adding camera:", e);
-    alert("Failed to add camera: " + e);
+    alert(t("app.failedToAddCamera", { error: String(e) }));
   }
 }
 
@@ -392,6 +366,16 @@ function closeMainStream() {
 
 onMounted(async () => {
   isUnmounted = false;
+
+  await nextTick();
+  updateViewport();
+
+  if (typeof ResizeObserver !== "undefined") {
+    gridResizeObserver = new ResizeObserver(() => updateViewport());
+    if (gridEl.value) gridResizeObserver.observe(gridEl.value);
+  }
+  window.addEventListener("resize", updateViewport);
+
   await fetchCameras();
 
   for (const camera of cameras.value) {
@@ -401,33 +385,64 @@ onMounted(async () => {
 
 onUnmounted(() => {
   isUnmounted = true;
+  window.removeEventListener("resize", updateViewport);
+  if (gridResizeObserver) {
+    gridResizeObserver.disconnect();
+    gridResizeObserver = null;
+  }
   hlsInstances.value.forEach((hls) => hls.destroy());
   mainHlsInstances.value.forEach((hls) => hls.destroy());
 });
+
+const shouldHide = ref(false);
+const cursorTimeout = ref<number | null>(null);
+
+function handleIdleCursor() {
+  shouldHide.value = false;
+  if (cursorTimeout.value) clearTimeout(cursorTimeout.value);
+  cursorTimeout.value = setTimeout(() => {
+    shouldHide.value = true;
+  }, 2000);
+}
 </script>
 
 <template>
-  <div class="h-screen bg-black text-white flex flex-col">
+  <div
+    class="h-screen bg-black text-white flex flex-col"
+    @mousemove="handleIdleCursor"
+  >
     <div
-      class="shrink-0 flex items-center gap-3 px-2 py-2 border-b border-white/10"
+      class="shrink-0 bg-black/90 duration-200 flex items-center gap-3 px-2 py-2 border-b border-white/10 absolute top-0 inset-x-0 z-10"
+      :class="{
+        'opacity-0': shouldHide,
+      }"
     >
-      <div class="font-medium">Cameras ({{ cameras.length }})</div>
+      <div class="font-medium">
+        {{ t("app.camerasCount", { count: cameras.length }) }}
+      </div>
       <div class="flex-1" />
       <button
         @click="showAddForm = !showAddForm"
         class="px-3 py-1 border border-white/20 hover:border-white/40"
       >
-        {{ showAddForm ? "Close" : "Add" }}
+        {{ showAddForm ? t("app.close") : t("app.add") }}
       </button>
     </div>
 
-    <div v-if="showAddForm" class="shrink-0 px-2 py-2 border-b border-white/10">
+    <div
+      v-if="showAddForm"
+      class="fixed inset-0 flex items-center justify-center border-b border-white/10 z-[60] p-4"
+    >
+      <div
+        class="absolute inset-0 bg-black/50 z-40"
+        @click="showAddForm = false"
+      ></div>
       <form
         @submit.prevent="addCamera"
-        class="grid grid-cols-1 md:grid-cols-3 gap-2 items-end"
+        class="grid grid-cols-1 gap-4 items-end z-50 p-8 bg-black/95 w-full shadow-4xl max-w-2xl"
       >
         <label class="block">
-          <div class="text-xs text-white/70 mb-1">Name</div>
+          <div class="text-xs text-white/70 mb-1">{{ t("app.name") }}</div>
           <input
             v-model="form.name"
             type="text"
@@ -436,7 +451,9 @@ onUnmounted(() => {
           />
         </label>
         <label class="block">
-          <div class="text-xs text-white/70 mb-1">Main RTSP</div>
+          <div class="text-xs text-white/70 mb-1">
+            {{ t("app.mainRtsp") }}
+          </div>
           <input
             v-model="form.mainStreamUrl"
             type="text"
@@ -445,7 +462,7 @@ onUnmounted(() => {
           />
         </label>
         <label class="block">
-          <div class="text-xs text-white/70 mb-1">Sub RTSP</div>
+          <div class="text-xs text-white/70 mb-1">{{ t("app.subRtsp") }}</div>
           <input
             v-model="form.subStreamUrl"
             type="text"
@@ -453,34 +470,30 @@ onUnmounted(() => {
             class="w-full bg-black border border-white/20 px-2 py-1"
           />
         </label>
-        <div class="md:col-span-3 flex gap-2">
+        <div class="flex gap-2">
           <button
             type="submit"
-            class="px-3 py-1 border border-white/20 hover:border-white/40"
+            class="px-3 w-full py-1 border border-white/20 hover:border-white/40"
           >
-            Save
+            {{ t("app.save") }}
           </button>
         </div>
       </form>
     </div>
 
     <div v-if="cameras.length" class="flex-1 min-h-0">
-      <div
-        class="grid w-full h-full gap-px bg-white/10"
-        style="grid-template-columns: repeat(24, minmax(0, 1fr)); grid-template-rows: repeat(24, minmax(0, 1fr));"
-      >
+      <div ref="gridEl" class="grid w-full h-full gap-px" :style="gridStyle">
         <div
           v-for="camera in displayCameras"
           :key="camera.id"
           class="bg-black relative"
-          :style="tileStyle(camera.id)"
           @click="openMainStream(camera)"
         >
           <div
             v-if="!camera.ready"
             class="absolute inset-0 flex items-center justify-center text-white/60 text-sm"
           >
-            Loading
+            {{ t("app.loading") }}
           </div>
           <video
             :id="`video-${camera.id}`"
@@ -490,23 +503,30 @@ onUnmounted(() => {
             class="w-full h-full object-cover"
           />
 
-          <div class="absolute left-1 right-1 bottom-1 flex items-center gap-2 text-xs">
+          <div
+            class="absolute left-1 right-1 bottom-1 flex items-center gap-2 text-xs duraion-200"
+            :class="{
+              'opacity-0': shouldHide,
+            }"
+          >
             <div class="flex-1 truncate bg-black/60 px-1 py-0.5">
               {{ camera.name }}
             </div>
-            <button
-              @click.stop="setFeaturedCamera(camera.id)"
-              class="bg-black/60 px-1 py-0.5 border border-white/10 hover:border-white/30"
-              :class="camera.id === effectiveFeaturedCameraId ? 'border-white/60' : ''"
-              title="Make large"
-            >
-              Large
-            </button>
+            <!-- <button -->
+            <!--   @click.stop="setFeaturedCamera(camera.id)" -->
+            <!--   class="bg-black/60 px-1 py-0.5 border border-white/10 hover:border-white/30" -->
+            <!--   :class=" -->
+            <!--     camera.id === effectiveFeaturedCameraId ? 'border-white/60' : '' -->
+            <!--   " -->
+            <!--   :title="t('app.makeLarge')" -->
+            <!-- > -->
+            <!--   {{ t("app.large") }} -->
+            <!-- </button> -->
             <button
               @click.stop="deleteCamera(camera.id)"
               class="bg-black/60 px-1 py-0.5 border border-white/10 hover:border-white/30"
             >
-              Delete
+              {{ t("app.delete") }}
             </button>
           </div>
         </div>
@@ -517,32 +537,33 @@ onUnmounted(() => {
       v-else
       class="flex-1 min-h-0 grid place-items-center text-white/60 text-sm"
     >
-      No cameras
+      {{ t("app.noCameras") }}
     </div>
 
     <Teleport to="body">
       <div
         v-if="selectedCamera"
-        class="fixed inset-0 bg-black/90 z-50 flex items-center justify-center"
+        class="fixed inset-0 bg-black/95 text-white z-50 flex items-center justify-center"
         @click="closeMainStream"
       >
-        <div class="w-full h-full p-2 flex flex-col">
-          <div class="flex justify-between items-center mb-2">
+        <div class="w-full h-full flex flex-col">
+          <div
+            class="flex justify-between items-center absolute top-0 inset-x-0 p-2 z-20"
+          >
             <h2 class="text-sm">{{ selectedCamera.name }}</h2>
             <button
               @click="closeMainStream"
-              class="px-2 text-white py-1 border border-white/20 hover:border-white/40"
+              class="px-2 py-1 border border-white/20 hover:border-white/40"
             >
-              Close
+              {{ t("app.close") }}
             </button>
           </div>
-          <div class="flex-1 bg-black">
+          <div class="flex-1 bg-black relative z-10">
             <video
               :id="`main-video-${selectedCamera.id}`"
-              controls
               autoplay
               muted
-              class="w-full h-full object-contain"
+              class="w-full h-full object-contain max-h-screen"
             />
           </div>
         </div>

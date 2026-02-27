@@ -3,7 +3,16 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
   ssr: false,
-  modules: ["@nuxtjs/tailwindcss"],
+  modules: ["@nuxtjs/tailwindcss", "@nuxtjs/i18n"],
+  i18n: {
+    strategy: "no_prefix",
+    defaultLocale: "cs",
+    langDir: "locales",
+    locales: [
+      { code: "en", name: "English", file: "en.json" },
+      { code: "cs", name: "Cesky", file: "cs.json" },
+    ],
+  },
   build: {
     transpile: ["hls.js"],
   },
@@ -15,18 +24,18 @@ export default defineNuxtConfig({
   nitro: {
     storage: {
       streams: {
-        driver: 'fs',
-        base: './public/streams'
-      }
-    }
+        driver: "fs",
+        base: "./public/streams",
+      },
+    },
   },
   routeRules: {
-    '/streams/**': {
+    "/streams/**": {
       headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
       },
     },
   },

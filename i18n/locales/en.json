@@ -1,0 +1,17 @@
+{
+  "app": {
+    "camerasCount": "Cameras ({count})",
+    "add": "Add",
+    "close": "Close",
+    "name": "Name",
+    "mainRtsp": "Main RTSP",
+    "subRtsp": "Sub RTSP",
+    "save": "Save",
+    "loading": "Loading",
+    "large": "Large",
+    "makeLarge": "Make large",
+    "delete": "Delete",
+    "noCameras": "No cameras",
+    "failedToAddCamera": "Failed to add camera: {error}"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "app": {
+    "camerasCount": "Kamery ({count})",
+    "add": "Přidat",
+    "close": "Zavřít",
+    "name": "Název",
+    "mainRtsp": "Hlavní RTSP",
+    "subRtsp": "Vedlejší RTSP",
+    "save": "Uložit",
+    "loading": "Načítání...",
+    "large": "Velký",
+    "makeLarge": "Zvětšit",
+    "delete": "Smazat",
+    "noCameras": "Žádné kamery nenalezeny. Přidejte svou první kameru.",
+    "failedToAddCamera": "Nepodařilo se přidat kameru. Zkontrolujte zadané informace a zkuste to znovu."
+  }
+}
