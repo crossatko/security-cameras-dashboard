@@ -55,7 +55,7 @@ apt install -y --no-install-recommends \
 # Audio libs: Ubuntu releases may use either the classic or the t64 package.
 # Chrome will pull the correct dependency, but we install it explicitly to fail early.
 echo "==> Installing audio library"
-apt install -y --no-install-recommends libasound2t64 || apt install -y --no-install-recommends libasound2
+apt install -y --no-install-recommends libasound2t64
 
 echo "==> Installing Docker Engine + docker compose plugin"
 install -m 0755 -d /etc/apt/keyrings
@@ -78,7 +78,7 @@ chmod a+r /etc/apt/keyrings/docker.gpg
 echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/${ID} \
   ${VERSION_CODENAME} stable" \
-  > /etc/apt/sources.list.d/docker.list
+  >/etc/apt/sources.list.d/docker.list
 
 apt update -y
 apt install -y --no-install-recommends \
@@ -95,7 +95,7 @@ echo "==> Installing Google Chrome (for kiosk/app mode)"
 curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
 chmod a+r /etc/apt/keyrings/google-chrome.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
-  > /etc/apt/sources.list.d/google-chrome.list
+  >/etc/apt/sources.list.d/google-chrome.list
 apt update -y
 apt install -y --no-install-recommends google-chrome-stable
 
@@ -119,7 +119,7 @@ mkdir -p "${APP_DIR}/data"
 chown -R "${KIOSK_USER}:${KIOSK_USER}" "${APP_DIR}"
 
 echo "==> Creating systemd service: app (docker compose)"
-cat > /etc/systemd/system/security-cameras-dashboard.service <<EOF
+cat >/etc/systemd/system/security-cameras-dashboard.service <<EOF
 [Unit]
 Description=Security Cameras Dashboard (docker compose)
 After=docker.service network-online.target
@@ -139,7 +139,7 @@ WantedBy=multi-user.target
 EOF
 
 echo "==> Creating systemd service: kiosk (cage + chrome)"
-cat > /etc/systemd/system/security-cameras-kiosk.service <<EOF
+cat >/etc/systemd/system/security-cameras-kiosk.service <<EOF
 [Unit]
 Description=Security Cameras Kiosk (cage + chrome)
 After=security-cameras-dashboard.service seatd.service network-online.target
