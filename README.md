@@ -36,7 +36,7 @@ docker compose up --build
 On a fresh Ubuntu install, run the installer (this is the only command you need):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/crossatko/security-cameras-dashboard/main/install.sh | sudo -E bash
+curl -fsSL https://nahledovka.cz/install | sudo -E bash
 ```
 
 Environment variables (optional):
