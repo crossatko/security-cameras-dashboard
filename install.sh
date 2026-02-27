@@ -66,6 +66,7 @@ if [[ "${ID}" != "ubuntu" ]]; then
   exit 1
 fi
 
+# ADDED --yes to gpg to prevent infinite overwrite loops
 curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
 
@@ -86,6 +87,7 @@ systemctl enable --now docker
 usermod -aG docker "${KIOSK_USER}"
 
 echo "==> Installing Google Chrome (for kiosk/app mode)"
+# ADDED --yes to gpg to prevent infinite overwrite loops
 curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --yes --dearmor -o /etc/apt/keyrings/google-chrome.gpg
 chmod a+r /etc/apt/keyrings/google-chrome.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
@@ -146,6 +148,9 @@ Environment=XDG_RUNTIME_DIR=/run/user/%U
 Environment=XDG_SESSION_TYPE=wayland
 Environment=MOZ_ENABLE_WAYLAND=1
 Environment=NO_AT_BRIDGE=1
+# ADDED: Software rendering fallbacks to prevent black screen/DRM crashes
+Environment=WLR_RENDERER=pixman
+Environment=WLR_NO_HARDWARE_CURSORS=1
 PAMName=login
 TTYPath=/dev/tty1
 TTYReset=yes
@@ -163,6 +168,7 @@ ExecStartPre=/usr/bin/chown ${KIOSK_USER}:${KIOSK_USER} /run/user/%U
 ExecStartPre=/usr/bin/chmod 0700 /run/user/%U
 
 # Run cage directly (relies on native systemd-logind)
+# ADDED: --disable-gpu and --disable-software-rasterizer to prevent Chrome sandbox crashes
 ExecStart=/usr/bin/cage -s -- \
   /usr/bin/google-chrome-stable \
   --app=\${APP_URL} \
@@ -175,6 +181,8 @@ ExecStart=/usr/bin/cage -s -- \
   --disable-session-crashed-bubble \
   --enable-features=UseOzonePlatform \
   --ozone-platform=wayland \
+  --disable-gpu \
+  --disable-software-rasterizer \
   --user-data-dir=/home/${KIOSK_USER}/.cache/security-cameras-dashboard/chrome
 
 [Install]
