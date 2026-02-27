@@ -36,7 +36,6 @@ apt install -y --no-install-recommends \
   gnupg \
   lsb-release \
   apt-transport-https \
-  software-properties-common \
   dbus-user-session \
   cage \
   fonts-noto \
@@ -86,14 +85,9 @@ apt install -y --no-install-recommends \
 systemctl enable --now docker
 usermod -aG docker "${KIOSK_USER}"
 
-echo "==> Installing Chromium (.deb edition without Snap)"
-# Removing the dummy package if it exists to be safe
-apt remove -y chromium-browser || true
-# Add the PPA that contains the native .deb Chromium package
-add-apt-repository ppa:xtradeb/apps -y
+echo "==> Installing Chromium (for kiosk/app mode)"
 apt update -y
-# Install 'chromium' (the .deb package) instead of 'chromium-browser' (the snap wrapper)
-apt install -y --no-install-recommends chromium
+apt install -y chromium-browser
 
 echo "==> Configuring user groups for hardware access"
 usermod -aG video "${KIOSK_USER}" || true
@@ -168,7 +162,7 @@ ExecStartPre=+/usr/bin/chmod 0700 /run/user/%U
 
 # Run cage directly (relies on native systemd-logind)
 ExecStart=/usr/bin/cage -s -- \
-  /usr/bin/chromium \
+  /usr/bin/chromium-browser \
   --app=\${APP_URL} \
   --kiosk \
   --no-first-run \
@@ -192,7 +186,7 @@ systemctl daemon-reload
 # Explicitly disable the default terminal login prompt on TTY1 so they don't fight
 systemctl disable getty@tty1.service || true
 
-# Enable services without --now so they start cleanly on the next boot
+# Removed --now so they start cleanly on the next boot
 systemctl enable security-cameras-dashboard.service
 systemctl enable security-cameras-kiosk.service
 
