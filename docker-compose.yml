@@ -1,0 +1,10 @@
+services:
+  nuxt:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NITRO_HOST=0.0.0.0
+      - DB_PATH=/app/data/nahledovka.sqlite
+    volumes:
+      - ./data:/app/data
