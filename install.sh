@@ -66,7 +66,7 @@ if [[ "${ID}" != "ubuntu" ]]; then
   exit 1
 fi
 
-curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
 
 echo \
@@ -86,7 +86,7 @@ systemctl enable --now docker
 usermod -aG docker "${KIOSK_USER}"
 
 echo "==> Installing Google Chrome (for kiosk/app mode)"
-curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --yes --dearmor -o /etc/apt/keyrings/google-chrome.gpg
 chmod a+r /etc/apt/keyrings/google-chrome.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
   >/etc/apt/sources.list.d/google-chrome.list
