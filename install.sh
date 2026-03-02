@@ -106,6 +106,12 @@ fi
 mkdir -p "${APP_DIR}/data"
 chown -R "${KIOSK_USER}:${KIOSK_USER}" "${APP_DIR}"
 
+echo "==> Building docker image(s) now (boot will not build)"
+(
+  cd "${APP_DIR}"
+  /usr/bin/docker compose build
+)
+
 echo "==> Creating systemd service: app (docker compose)"
 cat >/etc/systemd/system/security-cameras-dashboard.service <<EOF
 [Unit]
@@ -116,7 +122,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${APP_DIR}
-ExecStart=/usr/bin/docker compose up --build
+ExecStart=/usr/bin/docker compose up --no-build
 ExecStop=/usr/bin/docker compose down
 Restart=always
 RestartSec=2
